@@ -96,7 +96,7 @@ class FlappyBird:
     def each_cycle(self):
         clock = self.clock
         font = self.font
-        clock.tick(60)
+        clock.tick(3000)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 sys.exit()

@@ -19,56 +19,24 @@ FLAP = 1
 class Agent:
     def __init__(self):
         self.flappybird = FlappyBird()
-        self._state_size = 400 * 115
+        self._state_size = 10 * 10
         self._action_size = 2
         self._optimizer = Adam(learning_rate=0.01)
-        self.expirience_replay = deque(maxlen=2000)
 
         self.alpha = 0.7
         self.gamma = 0.6
         self.epsilon = 0.0
 
-        self.q_network = self._build_compile_model()
-        self.target_network = self._build_compile_model()
-        self.alighn_target_model()
+        self.q_network = self.deep_q_network()
 
-    def _build_compile_model(self):
+    def deep_q_network(self):
         model = Sequential()
-        # model.add(Embedding(self._state_size, 10, input_length=1))
-        # model.add(Reshape((10,)))
-        # model.add(Dense(50, activation='relu'))
-        model.add(Input(shape=(1,)))
+        model.add(Input(shape=(2,)))
         model.add(Dense(self._state_size, activation='relu'))
-        model.add(Dense(self._action_size, activation='linear'))
-
+        model.add(Dense(2, activation='linear'))
         model.compile(loss='mse', optimizer=self._optimizer)
+
         return model
-
-    def store(self, state, action, reward, next_state, terminated):
-        # print("STORE")
-        self.expirience_replay.append((state, action, reward, next_state, terminated))
-
-    def alighn_target_model(self):
-        self.target_network.set_weights(self.q_network.get_weights())
-
-    def retrain(self, batch_size):
-        # print("RETRAIN")
-        minibatch = random.sample(self.expirience_replay, batch_size)
-
-        for state, action, reward, next_state, terminated in minibatch:
-
-            target = self.q_network.predict(state)
-
-            if terminated:
-                target[0][action] = reward
-            else:
-                t = self.target_network.predict(next_state)
-                target[0][action] = reward + self.gamma * np.amax(t)
-
-            print("FIT")
-            self.q_network.fit(state, target, epochs=1, verbose=0)
-
-        print("FINISH RETRAIN")
 
     def init(self):
         pass
@@ -89,8 +57,8 @@ class Agent:
         return action
 
     def action(self, state):
-        q_value = self.q_network.predict(state)[0]
-        # print("Q Value:", q_value)
+        q_value = self.q_network.predict(state.reshape((1, 2)))[0]
+        print("Q Value:", q_value)
 
         if np.random.uniform() < self.epsilon:
             random_action = np.random.randint(0, 2)  # Random action (do nothing, flap)
@@ -134,21 +102,21 @@ class Agent:
         # if x > 200:
         #    x = 200
 
-        if y > 113:
-            y = 113
+        # if y > 113:
+        #    y = 113
 
-        if y < 10:
-            y = 0
+        # if y < 10:
+        #    y = 0
 
-        return np.array([x + 200, y])
+        return np.array([x, y])
 
     def reward(self):
         if not self.flappybird.dead:
             # print("reward: 1")
-            return 1
+            return 0.1
         else:
             # print("reward: -1000")
-            return -1000
+            return -10
 
     def run(self):
         self.flappybird.init_game()
@@ -166,13 +134,9 @@ class Agent:
 
             new_state = self.state()
             immediate_reward = self.reward()
-            self.store(state, action, immediate_reward, new_state, self.flappybird.dead)
-            if self.flappybird.dead:
-                # print("Action:", action)
-                self.alighn_target_model()
-            else:
-                if len(self.expirience_replay) > batch_size:
-                    self.retrain(batch_size)
+
+            future_reward = self.gamma * max(self.q_network.predict(new_state.reshape((1, 2)))[0])
+            self.q_network.predict(state.reshape((1, 2)))[0][action] = (1 - self.alpha) * self.q_network.predict(state.reshape((1, 2)))[0][action] + self.alpha * (immediate_reward + future_reward)
 
             if self.epsilon > 0.01:
                 self.epsilon -= 0.01
