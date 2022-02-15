@@ -19,24 +19,13 @@ FLAP = 1
 class Agent:
     def __init__(self):
         self.flappybird = FlappyBird()
-        self._state_size = 10 * 10
-        self._action_size = 2
-        self._optimizer = Adam(learning_rate=0.01)
 
         self.alpha = 0.7
         self.gamma = 0.6
         self.epsilon = 0.0
 
-        self.q_network = self.deep_q_network()
-
-    def deep_q_network(self):
-        model = Sequential()
-        model.add(Input(shape=(2,)))
-        model.add(Dense(self._state_size, activation='relu'))
-        model.add(Dense(2, activation='linear'))
-        model.compile(loss='mse', optimizer=self._optimizer)
-
-        return model
+        self.deep_q_network = DeepQNetwork()
+        self.memory = deque(maxlen=2000)
 
     def init(self):
         pass
@@ -57,22 +46,36 @@ class Agent:
         return action
 
     def action(self, state):
-        q_value = self.q_network.predict(state.reshape((1, 2)))[0]
-        print("Q Value:", q_value)
+        q_value = self.deep_q_network.rewards_for(state)
+        # print("Q Value:", q_value)
 
         if np.random.uniform() < self.epsilon:
             random_action = np.random.randint(0, 2)  # Random action (do nothing, flap)
             # print("random action:", random_action)
             return random_action
         else:
-            # print("State:", state)
-            # print("Q value:", q_value)
+            print("State:", state)
+            print("Q value:", q_value)
             if q_value[FLAP] > q_value[DO_NOTHING]:
                 # print("FLAP")
                 return FLAP
             else:
                 # print("DO NOTHING")
                 return DO_NOTHING
+
+    def remember(self, state, action, reward, next_state, done):
+        self.memory.append((state, action, reward, next_state, done))
+
+    def replay(self, sample_batch_size):
+        if len(self.memory) < sample_batch_size:
+            return
+        sample_batch = random.sample(self.memory, sample_batch_size)
+        for state, action, reward, next_state, done in sample_batch:
+            immediate_reward = reward
+            future_reward = self.gamma * max(self.deep_q_network.rewards_for(next_state))
+            rewards_prediction = self.deep_q_network.rewards_for(state)
+            rewards_prediction[action] = (1 - self.alpha) * rewards_prediction[action] + self.alpha * (immediate_reward + future_reward)
+            self.deep_q_network.save_rewards_for(state, rewards_prediction)
 
     def observe_world(self):
         positions = self.flappybird.get_world_position_objets()
@@ -99,14 +102,11 @@ class Agent:
         x = bottom_pipe[0] - (bird[0] + bird[2])
         y = bottom_pipe[1] - bird[1]
 
-        # if x > 200:
-        #    x = 200
+        if y > 113:
+            y = 113
 
-        # if y > 113:
-        #    y = 113
-
-        # if y < 10:
-        #    y = 0
+        if y < 10:
+            y = 0
 
         return np.array([x, y])
 
@@ -116,11 +116,11 @@ class Agent:
             return 0.1
         else:
             # print("reward: -1000")
-            return -10
+            return -100
 
     def run(self):
         self.flappybird.init_game()
-        batch_size = 1
+        batch_size = 32
 
         while True:
             # sleep(0.1)
@@ -135,11 +135,31 @@ class Agent:
             new_state = self.state()
             immediate_reward = self.reward()
 
-            future_reward = self.gamma * max(self.q_network.predict(new_state.reshape((1, 2)))[0])
-            self.q_network.predict(state.reshape((1, 2)))[0][action] = (1 - self.alpha) * self.q_network.predict(state.reshape((1, 2)))[0][action] + self.alpha * (immediate_reward + future_reward)
+            self.remember(state=state, action=action, reward=immediate_reward, next_state=new_state, done=self.flappybird.dead)
 
             if self.epsilon > 0.01:
                 self.epsilon -= 0.01
 
             if self.flappybird.dead:
+                self.replay(sample_batch_size=batch_size)
                 self.flappybird.restart_game()
+
+
+class DeepQNetwork:
+    def __init__(self):
+        self.model = self.deep_q_network(state_size=2, action_size=2)
+
+    def deep_q_network(self, state_size, action_size):
+        model = Sequential()
+        model.add(Input(shape=(state_size,)))
+        model.add(Dense(10, activation='relu'))
+        model.add(Dense(action_size, activation='linear'))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=0.01))
+
+        return model
+
+    def rewards_for(self, state):
+        return self.model.predict(state.reshape((1, 2)))[0]
+
+    def save_rewards_for(self, state, rewards):
+        self.model.fit(state.reshape((1, 2)), rewards.reshape((1, 2)), epochs=1, verbose=0)
