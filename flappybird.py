@@ -8,7 +8,8 @@ import numpy as np
 
 
 class FlappyBird:
-    def __init__(self):
+    def __init__(self, agent):
+        self.agent = agent
         self.screen = pygame.display.set_mode((400, 708))
         self.bird = pygame.Rect(65, 50, 50, 50)
         self.background = pygame.image.load("assets/background.png").convert()
@@ -99,6 +100,7 @@ class FlappyBird:
         clock.tick(3000)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                self.agent.save()
                 sys.exit()
             if (event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN) and not self.dead:
                 self.do_action()
@@ -148,7 +150,3 @@ class FlappyBird:
         self.init_game()
         while True:
             self.each_cycle()
-
-
-if __name__ == "__main__":
-    FlappyBird().run()
