@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
+import random
+import sys
+
+import numpy as np
 import pygame
 from pygame.locals import *  # noqa
-import sys
-import random
-import numpy as np
 
 
 class FlappyBird:
