@@ -11,7 +11,9 @@ from pygame.locals import *  # noqa
 class FlappyBird:
     def __init__(self, agent):
         self.agent = agent
-        self.screen = pygame.display.set_mode((400, 708))
+        self.screen_width = 400
+        self.screen_high = 708
+        self.screen = pygame.display.set_mode((self.screen_width, self.screen_high))
         self.bird = pygame.Rect(65, 50, 50, 50)
         self.background = pygame.image.load("assets/background.png").convert()
         self.birdSprites = [pygame.image.load("assets/1.png").convert_alpha(),
@@ -19,7 +21,7 @@ class FlappyBird:
                             pygame.image.load("assets/dead.png")]
         self.wallUp = pygame.image.load("assets/bottom.png").convert_alpha()
         self.wallDown = pygame.image.load("assets/top.png").convert_alpha()
-        self.gap = 230
+        self.gap = 330
         self.wallx = 400
         self.birdY = 350
         self.jump = 0

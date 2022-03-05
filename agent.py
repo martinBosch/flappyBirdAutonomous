@@ -14,10 +14,8 @@ DO_NOTHING = 0
 FLAP = 1
 
 
-def take_metrics(score, scores, step_until_dead, steps_until_dead):
+def take_metrics(scores, steps_until_dead):
     if len(scores) % 100 == 0:
-        scores.append(score)
-        steps_until_dead.append(step_until_dead)
         pd.DataFrame({'Scores': scores}).plot().get_figure().savefig('scores.pdf')
         pd.DataFrame({'Loss': steps_until_dead}).plot().get_figure().savefig('steps_until_dead.pdf')
 
@@ -31,6 +29,10 @@ def do_something_under(q_value_flap, q_value_do_nothing):
         return FLAP
     else:
         return DO_NOTHING
+
+
+def normalize(value, scale):
+    return value / scale
 
 
 class Agent:
@@ -68,7 +70,6 @@ class Agent:
             self.flappybird.hold_key_down()
         else:
             self.flappybird.release_key()
-
         return action
 
     def get_action_by(self, state):
@@ -105,7 +106,7 @@ class Agent:
         x = bottom_pipe[0] - (bird[0] + bird[2])
         y = (bottom_pipe[1]) - bird[1]
 
-        return np.array([x, y])
+        return np.array([normalize(x, self.flappybird.screen_width), normalize(y, self.flappybird.screen_high)])
 
     def reward(self):
         state = self.state()
@@ -155,7 +156,9 @@ class Agent:
 
             if self.flappybird.dead:
                 self.flappybird.restart_game()
-                take_metrics(score, scores, step_until_dead, steps_until_dead)
+                scores.append(score)
+                steps_until_dead.append(step_until_dead)
+                take_metrics(scores, steps_until_dead)
                 score = 0
                 step_until_dead = 0
             else:
