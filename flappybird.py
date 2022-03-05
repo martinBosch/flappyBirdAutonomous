@@ -21,7 +21,7 @@ class FlappyBird:
                             pygame.image.load("assets/dead.png")]
         self.wallUp = pygame.image.load("assets/bottom.png").convert_alpha()
         self.wallDown = pygame.image.load("assets/top.png").convert_alpha()
-        self.gap = 330
+        self.gap = 130
         self.wallx = 400
         self.birdY = 350
         self.jump = 0

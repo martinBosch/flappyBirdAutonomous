@@ -87,13 +87,19 @@ class Agent:
             return
         sample_batch = self.take_a_sample_of(sample_batch_size)
 
+        x = []
+        y = []
+
         for state, action, reward, next_state, done in sample_batch:
             immediate_reward = reward
             future_reward = self.gamma * max(self.target_network.rewards_for(next_state))
             rewards_prediction = self.q_network.rewards_for(state)
             rewards_prediction[action] = (1 - self.alpha) * rewards_prediction[action] + self.alpha * (
                     immediate_reward + future_reward)
-            self.q_network.save_rewards_for(state, rewards_prediction)
+            x.append(state)
+            y.append(rewards_prediction)
+            # self.q_network.save_rewards_for(state, rewards_prediction)
+        self.q_network.save_rewards_for(x, y)
 
     def take_a_sample_of(self, sample_batch_size):
         return random.sample(self.memory, sample_batch_size)
@@ -101,12 +107,14 @@ class Agent:
     def state(self):
         positions = self.flappybird.get_world_position_objets()
         bottom_pipe = positions[0]
+        upper_pipe = positions[1]
         bird = positions[2]
 
         x = bottom_pipe[0] - (bird[0] + bird[2])
-        y = (bottom_pipe[1]) - bird[1]
+        y_bottom = bottom_pipe[1] - bird[1]
+        y_upper = bird[1] - upper_pipe[1]
 
-        return np.array([normalize(x, self.flappybird.screen_width), normalize(y, self.flappybird.screen_high)])
+        return np.array([normalize(x, self.flappybird.screen_width), normalize(y_bottom, self.flappybird.screen_high)])
 
     def reward(self):
         state = self.state()
@@ -120,7 +128,7 @@ class Agent:
 
     def run(self):
         self.flappybird.init_game()
-        batch_size = 32
+        batch_size = 64
 
         n = 0
         score = 0
@@ -148,8 +156,8 @@ class Agent:
 
             self.decrease_epsilon()
 
-            if n % 100 == 0:
-                self.replay(sample_batch_size=batch_size)
+            # if n % 100 == 0:
+            self.replay(sample_batch_size=batch_size)
 
             if must_update_target_network_weights(n):
                 self.target_network.update_weights(self.q_network)
@@ -192,12 +200,12 @@ class DeepQNetwork:
 
     def save_rewards_for(self, state, rewards):
         self.model.fit(
-            state.reshape((1, 2)),
-            rewards.reshape((1, 2)),
+            np.array(state),
+            np.array(rewards),
             epochs=1,
             verbose=0,
             use_multiprocessing=True,
-            workers=2
+            workers=4
         )
 
     def update_weights(self, network):
