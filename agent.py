@@ -14,6 +14,25 @@ DO_NOTHING = 0
 FLAP = 1
 
 
+def take_metrics(score, scores, step_until_dead, steps_until_dead):
+    if len(scores) % 100 == 0:
+        scores.append(score)
+        steps_until_dead.append(step_until_dead)
+        pd.DataFrame({'Scores': scores}).plot().get_figure().savefig('scores.pdf')
+        pd.DataFrame({'Loss': steps_until_dead}).plot().get_figure().savefig('steps_until_dead.pdf')
+
+
+def must_update_target_network_weights(n):
+    return n % 1000 == 0
+
+
+def do_something_under(q_value_flap, q_value_do_nothing):
+    if q_value_flap > q_value_do_nothing:
+        return FLAP
+    else:
+        return DO_NOTHING
+
+
 class Agent:
     def __init__(self):
         self.flappybird = FlappyBird(self)
@@ -27,7 +46,7 @@ class Agent:
 
         self.q_network = DeepQNetwork(weights_file="q_network_weights.h5", learning_rate=self.learning_rate)
         self.target_network = DeepQNetwork(weights_file="target_network_weights.h5", learning_rate=self.learning_rate)
-        self.memory = deque(maxlen=2000)
+        self.memory = deque(maxlen=4000)
 
         self.target_network.update_weights(self.q_network)
 
@@ -54,16 +73,10 @@ class Agent:
 
     def get_action_by(self, state):
         if np.random.uniform() < self.epsilon + self.epsilon_min:
-            return self.decide_if_flap_or_do_nothing(np.random.uniform(), np.random.uniform())
+            return do_something_under(np.random.uniform(), np.random.uniform())
         else:
             q_value = self.q_network.rewards_for(state)
-            return self.decide_if_flap_or_do_nothing(q_value[FLAP], q_value[DO_NOTHING])
-
-    def decide_if_flap_or_do_nothing(self, q_value_flap, q_value_do_nothing):
-        if q_value_flap > q_value_do_nothing:
-            return FLAP
-        else:
-            return DO_NOTHING
+            return do_something_under(q_value[FLAP], q_value[DO_NOTHING])
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
@@ -100,10 +113,8 @@ class Agent:
         if not self.flappybird.dead and x == 0:
             return 10.0
         if not self.flappybird.dead:
-            # print("reward: 1")
             return 0.1
         else:
-            # print("reward: -1000")
             return -100.0
 
     def run(self):
@@ -113,6 +124,8 @@ class Agent:
         n = 0
         score = 0
         scores = []
+        step_until_dead = 0
+        steps_until_dead = []
 
         while True:
             state = self.state()
@@ -137,22 +150,17 @@ class Agent:
             if n % 100 == 0:
                 self.replay(sample_batch_size=batch_size)
 
-            if self.must_update_target_network_weights(n):
+            if must_update_target_network_weights(n):
                 self.target_network.update_weights(self.q_network)
 
             if self.flappybird.dead:
                 self.flappybird.restart_game()
-                scores.append(score)
+                take_metrics(score, scores, step_until_dead, steps_until_dead)
                 score = 0
-                # if n % 100 == 0:
-                # pd.DataFrame({'Scores': scores}).plot().get_figure().savefig('scores.pdf')
-                # que tanto aprend en base a lo que saco de la memoria
-                # pd.DataFrame({'Loss': curr_loss}).plot().get_figure().savefig('loss.pdf')
-
+                step_until_dead = 0
+            else:
+                step_until_dead += 1
             n += 1
-
-    def must_update_target_network_weights(self, n):
-        return n % 1000 == 0
 
     def decrease_epsilon(self):
         if self.epsilon > 0.0:
@@ -180,7 +188,14 @@ class DeepQNetwork:
         return self.model(state.reshape((1, 2)), training=False)[0].numpy()
 
     def save_rewards_for(self, state, rewards):
-        self.model.fit(state.reshape((1, 2)), rewards.reshape((1, 2)), epochs=1, verbose=0)
+        self.model.fit(
+            state.reshape((1, 2)),
+            rewards.reshape((1, 2)),
+            epochs=1,
+            verbose=0,
+            use_multiprocessing=True,
+            workers=2
+        )
 
     def update_weights(self, network):
         self.model.set_weights(network.model.get_weights())
