@@ -27,7 +27,7 @@ class Agent:
 
         self.q_network = DeepQNetwork(weights_file="q_network_weights.h5", learning_rate=self.learning_rate)
         self.target_network = DeepQNetwork(weights_file="target_network_weights.h5", learning_rate=self.learning_rate)
-        self.memory = deque(maxlen=4000)
+        self.memory = deque(maxlen=2000)
 
         self.target_network.update_weights(self.q_network)
 
@@ -54,7 +54,6 @@ class Agent:
 
     def get_action_by(self, state):
         if np.random.uniform() < self.epsilon + self.epsilon_min:
-            print(f"Taking a randon value, with an epsilon {self.epsilon}")
             return self.decide_if_flap_or_do_nothing(np.random.uniform(), np.random.uniform())
         else:
             q_value = self.q_network.rewards_for(state)
@@ -71,7 +70,6 @@ class Agent:
 
     def replay(self, sample_batch_size):
         if len(self.memory) < sample_batch_size:
-            print("Lack of games for training")
             return
         sample_batch = self.take_a_sample_of(sample_batch_size)
 
@@ -97,10 +95,16 @@ class Agent:
         return np.array([x, y])
 
     def reward(self):
+        state = self.state()
+        x = state[0]
+        if not self.flappybird.dead and x == 0:
+            return 10.0
         if not self.flappybird.dead:
+            # print("reward: 1")
             return 0.1
         else:
-            return -100
+            # print("reward: -1000")
+            return -100.0
 
     def run(self):
         self.flappybird.init_game()
@@ -140,10 +144,10 @@ class Agent:
                 self.flappybird.restart_game()
                 scores.append(score)
                 score = 0
-                if n % 100 == 0:
-                    pd.DataFrame({'Scores': scores}).plot().get_figure().savefig('scores.pdf')
-                    # que tanto aprend en base a lo que saco de la memoria
-                    # pd.DataFrame({'Loss': curr_loss}).plot().get_figure().savefig('loss.pdf')
+                # if n % 100 == 0:
+                # pd.DataFrame({'Scores': scores}).plot().get_figure().savefig('scores.pdf')
+                # que tanto aprend en base a lo que saco de la memoria
+                # pd.DataFrame({'Loss': curr_loss}).plot().get_figure().savefig('loss.pdf')
 
             n += 1
 
