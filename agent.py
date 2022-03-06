@@ -40,6 +40,8 @@ class Agent:
     def __init__(self):
         self.flappybird = FlappyBird(self)
 
+        self.is_training = False
+
         self.alpha = 0.7
         self.gamma = 0.9
         self.epsilon = 1
@@ -58,8 +60,9 @@ class Agent:
         pass
 
     def save(self):
-        self.q_network.save_weights()
-        self.target_network.save_weights()
+        if self.is_training:
+            self.q_network.save_weights()
+            self.target_network.save_weights()
 
     """
      * Method used to determine the next move to be performed by the agent.
@@ -75,7 +78,7 @@ class Agent:
         return action
 
     def get_action_by(self, state):
-        if np.random.uniform() < self.epsilon + self.epsilon_min:
+        if self.is_training and np.random.uniform() < self.epsilon + self.epsilon_min:
             return do_something_under(np.random.uniform(), np.random.uniform())
         else:
             q_value = self.q_network.rewards_for(state)
@@ -163,7 +166,7 @@ class Agent:
 
             self.decrease_epsilon()
 
-            if n % 10 == 0:
+            if self.is_training and n % 10 == 0:
                 self.replay(sample_batch_size=batch_size)
 
             if must_update_target_network_weights(n):
