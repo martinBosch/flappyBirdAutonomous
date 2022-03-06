@@ -14,10 +14,11 @@ DO_NOTHING = 0
 FLAP = 1
 
 
-def take_metrics(scores, steps_until_dead):
+def take_metrics(scores, steps_until_dead, pipes):
     if len(scores) % 100 == 0:
         pd.DataFrame({'Scores': scores}).plot().get_figure().savefig('scores.pdf')
         pd.DataFrame({'Loss': steps_until_dead}).plot().get_figure().savefig('steps_until_dead.pdf')
+        pd.DataFrame({'Pipes': pipes}).plot().get_figure().savefig('pipes_until_dead.pdf')
 
 
 def must_update_target_network_weights(n):
@@ -45,6 +46,7 @@ class Agent:
         self.epsilon_decay = 0.01
         self.epsilon_min = 0.01
         self.learning_rate = 0.01
+        self.pipes = 0
 
         self.q_network = DeepQNetwork(weights_file="q_network_weights.h5", learning_rate=self.learning_rate)
         self.target_network = DeepQNetwork(weights_file="target_network_weights.h5", learning_rate=self.learning_rate)
@@ -98,7 +100,6 @@ class Agent:
                     immediate_reward + future_reward)
             x.append(state)
             y.append(rewards_prediction)
-            # self.q_network.save_rewards_for(state, rewards_prediction)
         self.q_network.save_rewards_for(x, y)
 
     def take_a_sample_of(self, sample_batch_size):
@@ -107,24 +108,29 @@ class Agent:
     def state(self):
         positions = self.flappybird.get_world_position_objets()
         bottom_pipe = positions[0]
-        upper_pipe = positions[1]
         bird = positions[2]
 
         x = bottom_pipe[0] - (bird[0] + bird[2])
         y_bottom = bottom_pipe[1] - bird[1]
-        y_upper = bird[1] - upper_pipe[1]
 
         return np.array([normalize(x, self.flappybird.screen_width), normalize(y_bottom, self.flappybird.screen_high)])
 
     def reward(self):
         state = self.state()
         x = state[0]
+
+        if 0.0030 >= x > 0.0000:
+            self.pipes += 1
+
         if not self.flappybird.dead and x == 0:
             return 10.0
         if not self.flappybird.dead:
-            return 0.1
+            return 0.1 + 1 * self.pipes
         else:
-            return -100.0
+            allowance = 1 * self.pipes
+            if allowance > 100:
+                return -100
+            return -100.0 + allowance
 
     def run(self):
         self.flappybird.init_game()
@@ -135,6 +141,7 @@ class Agent:
         scores = []
         step_until_dead = 0
         steps_until_dead = []
+        pipes_until_dead = []
 
         while True:
             state = self.state()
@@ -156,8 +163,8 @@ class Agent:
 
             self.decrease_epsilon()
 
-            # if n % 100 == 0:
-            self.replay(sample_batch_size=batch_size)
+            if n % 10 == 0:
+                self.replay(sample_batch_size=batch_size)
 
             if must_update_target_network_weights(n):
                 self.target_network.update_weights(self.q_network)
@@ -166,15 +173,18 @@ class Agent:
                 self.flappybird.restart_game()
                 scores.append(score)
                 steps_until_dead.append(step_until_dead)
-                take_metrics(scores, steps_until_dead)
+                pipes_until_dead.append(self.pipes)
+                take_metrics(scores, steps_until_dead, pipes_until_dead)
+                print(score)
                 score = 0
                 step_until_dead = 0
+                self.pipes = 0
             else:
                 step_until_dead += 1
             n += 1
 
     def decrease_epsilon(self):
-        if self.epsilon > 0.0:
+        if self.epsilon > 0.0001:
             self.epsilon -= self.epsilon_decay
 
 
@@ -203,9 +213,7 @@ class DeepQNetwork:
             np.array(state),
             np.array(rewards),
             epochs=1,
-            verbose=0,
-            use_multiprocessing=True,
-            workers=4
+            verbose=0
         )
 
     def update_weights(self, network):
